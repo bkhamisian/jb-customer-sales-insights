@@ -154,4 +154,86 @@ where discount_id is null and discount_in_usd > 0 and amount_in_usd = 0
 group by 1;
 
 ----------------------------------------------------------------------------------
+-- Studying the transition of products (from_path = to_path / cases where from_path is null / New customer cases )
+with customer_journey as (
+         select
+             *,
+             lag(product_code) over (partition by customer order by processed_date, customer_status desc, product_code) as previous_product
+         from
+             jetbrains.test_task
+         order by processed_date
+     ),
 
+     paths as (
+         select
+             *,
+             case
+                 when previous_product is null and customer_status = 'new customer' then '[New Customer]'
+                 else previous_product
+                 end as from_path,
+             product_code as to_path
+         from
+             customer_journey
+     )
+
+select customer_status, license_type,/* from_path, to_path,*/ count(*) as cnt_transactions
+from paths
+where from_path = to_path
+group by 1,2;
+
+-- I want to capture the same day anomalies. That is having "new customer" and "existing customer: new product use" both on the same day
+select -- Get the full details of the original transactions of anomalies with 'existing customer: new product use'
+         tt.*
+         from (select customer,
+                      processed_date,
+                      product_code
+               from jetbrains.test_task
+               where license_type = 'New'                                   -- Interested only in 'New' licenses
+                 and customer_status in
+                     ('new customer', 'existing customer: new product use') -- with these two customer status categories
+               group by customer,
+                        processed_date,
+                        product_code
+               having
+                   -- Looking for groups that contain both distinct statuses.
+                   count(distinct customer_status) = 2) sda
+         inner join
+                jetbrains.test_task tt
+                  on tt.customer = sda.customer
+                      and tt.processed_date = sda.processed_date
+                      and tt.product_code = sda.product_code
+         where
+               tt.license_type = 'New'
+           and tt.customer_status in ('new customer', 'existing customer: new product use');
+
+-- To capture anomalies that this is not the first time the customer has purchased this product with customer_status = "existing customer: new product use"
+with ranked_purchases as (
+    select -- for each customer and each unique product, rank their purchases chronologically.
+        customer,
+        product_code,
+        customer_status,
+        license_type,
+        processed_date,
+        row_number() over (partition by customer, product_code order by processed_date, customer_status) as purchase_rank
+    from
+        jetbrains.test_task
+)
+
+select
+    customer,
+    product_code,
+    processed_date,
+    customer_status,
+    license_type,
+    purchase_rank
+from
+    ranked_purchases
+where
+    customer_status = 'existing customer: new product use'   -- The status is 'new product use'.
+  and license_type = 'New' -- The license type is 'New'.
+  and purchase_rank > 1 -- To capture anomalies
+order by
+    customer,
+    processed_date;
+
+----------------------------------------------------------------------------------
