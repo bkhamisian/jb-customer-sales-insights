@@ -158,7 +158,7 @@ group by 1;
 with customer_journey as (
          select
              *,
-             lag(product_code) over (partition by customer order by processed_date, customer_status desc, product_code) as previous_product
+             lag(product_code) over (partition by customer order by processed_date, customer_status, product_code) as previous_product
          from
              jetbrains.test_task
          order by processed_date

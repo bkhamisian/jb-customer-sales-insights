@@ -79,6 +79,8 @@ with duplicate_transactions as (
                 customer_status,
                 license_type,
                 processed_date,
+                discount_id,
+                amount_in_usd,
                 row_number() over (partition by customer, product_code order by processed_date, customer_status) as purchase_rank
          from
              rm_same_day_anomalies
@@ -96,8 +98,10 @@ with duplicate_transactions as (
             ranked_purchases
         where
             customer_status = 'existing customer: new product use'   -- The status is 'new product use'.
-            and license_type = 'New' -- The license type is 'New'.
+            and license_type in ('New') --, 'Upgrade') -- The license type can be both 'New' and 'Upgrade'.
             and purchase_rank > 1 -- To capture anomalies
+            and amount_in_usd = 0
+            and discount_id is null
         ),
 
     -- To capture anomalies that this is not the first time the customer has purchased this product with customer_status = "existing customer: new product use"
@@ -206,24 +210,26 @@ with duplicate_transactions as (
                paid_amount_in_usd,
                updated_discount_in_usd,
                surcharge_amount_in_usd,
-               from_path,
+               case when from_path != to_path
+                             and transition_flag is false
+                             and from_path is not null
+                   then product_code else from_path end as from_path, -- The from_path of the renewed product matches the original product in case that product has been bought before. A -> A, B -> B (not A -> B).
                to_path,
-               case when customer_status in ('new customer', 'existing customer: new product use')
-                             and from_path is not null -- This condition excludes cases where a product might transition to itself (e.g., A -> A)
+               transition_flag,
+               round(paid_amount_in_usd + updated_discount_in_usd, 2)                                     as total_amount_in_usd,
+               round((updated_discount_in_usd / (paid_amount_in_usd + updated_discount_in_usd) * 100),
+                     0)                                                                                   as discount_percentage
+        from (select
+                     *,
+                     case
+                         when customer_status in ('new customer', 'existing customer: new product use')
+                             and
+                              from_path is not null -- This condition excludes cases where a product might transition to itself (e.g., A -> A)
                              and from_path != to_path -- and makes sure we have a valid starting point for the path.
-                   then true else false end as transition_flag,
-               round(paid_amount_in_usd + updated_discount_in_usd, 2) as total_amount_in_usd,
-               round((updated_discount_in_usd / (paid_amount_in_usd + updated_discount_in_usd) * 100), 0) as discount_percentage
-        from paths
+                             then true
+                         else false end                                                                         as transition_flag
+              from paths)
     )
 
-select count(*), count(Distinct customer)
-from final;
--- 38512,10448
-
--- select *
--- from final
--- where discount_id is null and updated_discount_in_usd > 0 and paid_amount_in_usd > 0
--- and customer_status = 'existing customer: renewal';
-
--- what about if the date is exactly the same while calculating the transition?
+select *
+from final
