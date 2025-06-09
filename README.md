@@ -8,7 +8,7 @@
 
 This project analyzes a transactional sales dataset _(data/test_task.csv)_. The primary goal is to explore the data to uncover insights into product performance, discount effectiveness, customer behavior, and the overall health of the subscription business model. 
 
-The final output is a combination of four dashboards designed to provide clear, actionable insights for internal stakeholders:
+The final output is a combination of four dashboards designed to tell a story and provide clear and actionable insights:
 * **Dashboard 1: Executive Overview** - This dashboard provides an overview of top performing products, overall revenue trends, and the company's product business positioning.
 * **Dashboard 2: Discount Effectiveness** - This dashboard measures the financial impact and effectiveness of discounts by analyzing revenue per sale, customer acquisition cost and optimal discount levels.
 * **Dashboard 3: Customer Transition Paths** - This dashboard visualizes the customer journey. The most popular paths users take when moving between different products or upgrading within the same product line.
