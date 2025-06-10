@@ -126,7 +126,7 @@ with first_transaction as (
                            and t.processed_date = f.first_transaction_date
      )
 
-select *
+select * --count(distinct customer)
 from first_status
 where customer_status  != 'new customer';
 ----------------------------------------------------------------------------------
