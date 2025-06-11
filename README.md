@@ -29,9 +29,9 @@ This repository is structured to provide a clear overview of the entire process.
 #### 📊 Dashboards
 The complete set of dashboards, including all charts and insights, can be found in the `dashboards` directory of this repository. For easy access and sharing, they are also published on Tableau Public:
 
-- **[BaretKhamisian_BI_Task_Dashboard1](https://public.tableau.com/app/profile/baret.khamisian6968/viz/BaretKhamisian_BI_Task_Dashboard1/ExecutiveOverview)**  
+- **[BaretKhamisian_BI_Task_Dashboard1](https://public.tableau.com/views/BaretKhamisian_BI_Task_Dashboard1/ExecutiveOverview?:language=en-US&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**  
 
-- **[BaretKhamisian_BI_Task_Dashboard2](https://public.tableau.com/app/profile/baret.khamisian6968/viz/BaretKhamisian_BI_Task_Dashboard2/SubscriptionRevenueHealth)**
+- **[BaretKhamisian_BI_Task_Dashboard2](https://public.tableau.com/views/BaretKhamisian_BI_Task_Dashboard2/SubscriptionRevenueHealth?:language=en-US&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
 
 - **[BaretKhamisian_BI_Task_EDA](https://public.tableau.com/views/BaretKhamisian_BI_Task_EDA/UA-RevenueSplit?:language=en-US&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**  
 
