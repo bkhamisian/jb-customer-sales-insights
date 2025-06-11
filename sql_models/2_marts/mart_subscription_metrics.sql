@@ -22,20 +22,20 @@ with recursive cleaned_dataset as (
 
      transaction_history as (
          select *,
-                lag(processed_date, 1) over (partition by customer, product_code order by processed_date) as previous_date,
-                lag(total_amount_in_usd, 1) over (partition by customer, product_code order by processed_date) as previous_total_amount,
-                lead(processed_date, 1) over (partition by customer, product_code order by processed_date) as next_date,
-                lead(total_amount_in_usd, 1) over (partition by customer, product_code order by processed_date) as next_total_amount,
+                lag(processed_date) over (partition by customer, product_code order by processed_date) as previous_date,
+                lag(total_amount_in_usd) over (partition by customer, product_code order by processed_date) as previous_total_amount,
+                lead(processed_date) over (partition by customer, product_code order by processed_date) as next_date,
+                lead(total_amount_in_usd) over (partition by customer, product_code order by processed_date) as next_total_amount,
                 case
-                    when date_diff(processed_date, lag(processed_date, 1) over (partition by customer, product_code
+                    when date_diff(processed_date, lag(processed_date) over (partition by customer, product_code
                         order by processed_date), day) between 25 and 45 then 'Monthly'
-                    when date_diff(processed_date, lag(processed_date, 1) over (partition by customer, product_code
+                    when date_diff(processed_date, lag(processed_date) over (partition by customer, product_code
                         order by processed_date), day) > 320 then 'Yearly'
                     end as backward_interval,
                 case
-                    when date_diff(lead(processed_date, 1) over (partition by customer, product_code
+                    when date_diff(lead(processed_date) over (partition by customer, product_code
                         order by processed_date), processed_date, day) between 25 and 45 then 'Monthly'
-                    when date_diff(lead(processed_date, 1) over (partition by customer, product_code
+                    when date_diff(lead(processed_date) over (partition by customer, product_code
                         order by processed_date), processed_date, day) > 320 then 'Yearly'
                     end as forward_interval
          from cleaned_dataset
@@ -134,7 +134,7 @@ with recursive cleaned_dataset as (
                customer,
                is_new_customer_this_month,
                total_mrr,
-               lag(total_mrr, 1, 0) over (partition by customer order by mrr_month) as previous_customer_mrr
+               lag(total_mrr) over (partition by customer order by mrr_month) as previous_customer_mrr
         from monthly_summary
     ),
 
@@ -154,22 +154,25 @@ with recursive cleaned_dataset as (
                round(sum(case
                              when total_mrr < previous_customer_mrr then previous_customer_mrr - total_mrr
                              else 0
-                   end), 2)                                                   as contraction_mrr -- Any MRR decrease from existing customers (who have not churned)
+                   end), 2)                                                   as contraction_mrr, -- Any MRR decrease from existing customers (who have not churned)
 --                round(sum(case
 --                              when total_mrr = 0 and previous_customer_mrr > 0 then previous_customer_mrr
 --                              else 0
 --                    end), 2)                                                   as churned_mrr -- The previous month's MRR for customers who have 0 MRR this month
+               count(distinct case when not is_new_customer_this_month then customer end) as existing_customers
         from final_calculation
         group by mrr_month
     ),
 
     final as (
         select *,
-               lag(mrr, 1, 0) over (order by mrr_month) as previous_mrr,
+               lag(mrr) over (order by mrr_month) as previous_mrr,
+               lag(active_customers) over (order by mrr_month) as previous_month_active_customers,
                -- Churn MRR will not be calculated like this to make sure the waterfall chart is perfectly visualized
                -- I approached it like this because the source data makes it difficult to directly identify churned customers
                -- Even though my initial calculation provided accurate metrics (close to the below), this approach make sre the chart is visualized correctly
-               round((lag(mrr, 1, 0) over (order by mrr_month) + new_mrr + expansion_mrr - contraction_mrr) - mrr, 2) as churned_mrr
+               round((lag(mrr) over (order by mrr_month) + new_mrr + expansion_mrr - contraction_mrr) - mrr, 2) as churned_mrr,
+               ((lag(active_customers) over (order by mrr_month)) - existing_customers) as churned_customers
         from monthly_aggregation
     )
 
@@ -182,5 +185,7 @@ select
     contraction_mrr,
     churned_mrr,
     active_customers,
-    arpu
+    arpu,
+    existing_customers,
+    churned_customers
 from final
