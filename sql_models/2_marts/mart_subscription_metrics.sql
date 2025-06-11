@@ -123,57 +123,64 @@ with recursive cleaned_dataset as (
         select mrr_month,
                customer,
                (min(mrr_month) over (partition by customer)) = mrr_month as is_new_customer_this_month,
-               sum(case
-                       when updated_license_type in ('New', 'Upgrade') then monthly_revenue
-                       else 0
-                   end) as new_mrr_value,
-               sum(case
-                       when updated_license_type = 'Renew' then monthly_revenue
-                       else 0
-                   end) as renewal_mrr_value
+               sum(monthly_revenue) as total_mrr -- Simplified to total MRR per customer
         from all_combined_data
         group by mrr_month,
                  customer
     ),
 
-    final_calculation as ( -- Comparing this month MRR to last month to calculate churn and expansion
+    final_calculation as (
         select mrr_month,
                customer,
                is_new_customer_this_month,
-               new_mrr_value,
-               renewal_mrr_value,
-               coalesce(new_mrr_value, 0) + coalesce(renewal_mrr_value, 0) as total_mrr,
-               lag(coalesce(new_mrr_value, 0) + coalesce(renewal_mrr_value, 0), 1, 0) over (partition by customer
-                   order by mrr_month) as previous_mrr
+               total_mrr,
+               lag(total_mrr, 1, 0) over (partition by customer order by mrr_month) as previous_customer_mrr
         from monthly_summary
     ),
 
-    final as ( -- Final aggregation by month
+    monthly_aggregation as (
         select mrr_month,
                round(sum(total_mrr), 2)                                       as mrr,
-               round(sum(previous_mrr), 2)                                    as previous_mrr, -- start of the month mrr. Will be used in tableau calculations
                count(distinct customer)                                       as active_customers,
                round(sum(total_mrr) / nullif(count(distinct customer), 0), 2) as arpu,
-               round(sum(new_mrr_value), 2)                                   as new_and_upgrade_mrr,
-               round(sum(renewal_mrr_value), 2)                               as renewal_mrr,
                round(sum(case
-                             when total_mrr > previous_mrr
-                                 and not is_new_customer_this_month then total_mrr - previous_mrr
+                             when is_new_customer_this_month then total_mrr
                              else 0
-                   end), 2)                                                   as expansion_mrr,
+                   end), 2)                                                   as new_mrr, -- Total MRR from customers in their first month
                round(sum(case
-                             when total_mrr < previous_mrr then previous_mrr - total_mrr
+                             when not is_new_customer_this_month and total_mrr > previous_customer_mrr then total_mrr - previous_customer_mrr
                              else 0
-                   end), 2)                                                   as contraction_mrr,
+                   end), 2)                                                   as expansion_mrr, -- Any MRR increase from existing customers
                round(sum(case
-                             when total_mrr = 0
-                                 and previous_mrr > 0 then previous_mrr
+                             when total_mrr < previous_customer_mrr then previous_customer_mrr - total_mrr
                              else 0
-                   end), 2)                                                   as churned_mrr
+                   end), 2)                                                   as contraction_mrr -- Any MRR decrease from existing customers (who have not churned)
+--                round(sum(case
+--                              when total_mrr = 0 and previous_customer_mrr > 0 then previous_customer_mrr
+--                              else 0
+--                    end), 2)                                                   as churned_mrr -- The previous month's MRR for customers who have 0 MRR this month
         from final_calculation
         group by mrr_month
-        order by mrr_month
+    ),
+
+    final as (
+        select *,
+               lag(mrr, 1, 0) over (order by mrr_month) as previous_mrr,
+               -- Churn MRR will not be calculated like this to make sure the waterfall chart is perfectly visualized
+               -- I approached it like this because the source data makes it difficult to directly identify churned customers
+               -- Even though my initial calculation provided accurate metrics (close to the below), this approach make sre the chart is visualized correctly
+               round((lag(mrr, 1, 0) over (order by mrr_month) + new_mrr + expansion_mrr - contraction_mrr) - mrr, 2) as churned_mrr
+        from monthly_aggregation
     )
 
-select *
+select
+    mrr_month,
+    mrr,
+    previous_mrr,
+    new_mrr,
+    expansion_mrr,
+    contraction_mrr,
+    churned_mrr,
+    active_customers,
+    arpu
 from final
